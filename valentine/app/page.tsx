@@ -17,7 +17,7 @@ const BUTTON_WIDTH = 160;
 const BUTTON_HEIGHT = 56;
 const BUTTON_GAP = 24;
 const VIEWPORT_PADDING = 20;
-const MAX_EVASIONS = 200;
+const MAX_EVASIONS = 400;
 
 const HAPPY_CAT_GIF = "https://media.giphy.com/media/MDJ9IbxxvDUQM/giphy.gif";
 
@@ -378,6 +378,34 @@ export default function ValentinePage() {
     // ─── Render ───────────────────────────────────────────────────────────────
     const showFloatingNo = !accepted && evasionStarted;
 
+    // Dynamic bottom text with evasion stages
+    let bottomText = "";
+    const evasionStages = [
+        "Are you sure?",
+        "Really sure??",
+        "Think again!",
+        "Last chance!",
+    ];
+    // Only show evasion stages if not swapping and not accepted
+    if (evasionStarted && !evasionDisabled && !accepted) {
+        // Show the first message on first evasion, then increment at intervals
+        const evasionStep =
+            evasionCountRef.current >= 1
+                ? Math.min(
+                      Math.floor(
+                          (evasionCountRef.current - 1) /
+                              (MAX_EVASIONS / evasionStages.length),
+                      ),
+                      evasionStages.length - 1,
+                  )
+                : -1;
+        if (evasionStep >= 0) {
+            bottomText = evasionStages[evasionStep];
+        }
+    } else if (evasionDisabled && !accepted) {
+        bottomText = "Here, I'll help you out a little bit";
+    }
+
     return (
         <div
             ref={containerRef}
@@ -439,6 +467,15 @@ export default function ValentinePage() {
 
             {/* Floating No button (appears after evasion starts) */}
             {showFloatingNo && NoButtonFloating}
+
+            {/* Bottom text */}
+            {bottomText && (
+                <div className="fixed bottom-6 left-0 w-full flex justify-center z-20">
+                    <div className="text-pink-600 font-semibold px-6 py-3 text-md">
+                        {bottomText}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
