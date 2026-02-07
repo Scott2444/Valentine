@@ -427,7 +427,7 @@ export default function ValentinePage() {
 
                         {/* Buttons container */}
                         <div
-                            className="flex items-center justify-start gap-6"
+                            className="flex items-center justify-start gap-6 h-12"
                             style={{ width: BUTTON_WIDTH * 2 + BUTTON_GAP }}
                         >
                             {YesButton}
@@ -435,7 +435,7 @@ export default function ValentinePage() {
                             {!evasionStarted ? (
                                 NoButtonStatic
                             ) : (
-                                <div className="w-40 h-14" />
+                                <div className="w-40 h-10" />
                             )}
                         </div>
                     </motion.div>
