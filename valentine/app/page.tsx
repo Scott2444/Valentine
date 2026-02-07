@@ -17,7 +17,7 @@ const BUTTON_WIDTH = 160;
 const BUTTON_HEIGHT = 56;
 const BUTTON_GAP = 24;
 const VIEWPORT_PADDING = 20;
-const MAX_EVASIONS = 400;
+const MAX_EVASIONS = 250;
 
 const HAPPY_CAT_GIF = "https://media.giphy.com/media/MDJ9IbxxvDUQM/giphy.gif";
 

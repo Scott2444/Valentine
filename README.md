@@ -1,11 +1,6 @@
 # Valentine
 
-A static webpage to ask my girlfriend to be my valentine. It will be a single page. It will start with I ask her to be my valentine with a Yes and No button. The joke is that the No button will avoid being clicked. It will escalate in stages. Based on how close the mouse gets to the No button, we will move onto the next stage.
-
-1. The No button will slowly move away from the mouse.
-2. The No button will teleport across the screen
-3. The No button will swap with the Yes button
-4. A jail cell will be placed over the No button and a cursor-disabled will be used. A big arrow will point at the Yes button.
+A static webpage to ask my girlfriend to be my valentine. It will be a single page. It will start with I ask her to be my valentine with a Yes and No button. The joke is that the No button will avoid being clicked. The No button will first move away from the cursor to evade it. Eventually, if it has to evade too much, it will swap with Yes when No is pressed.
 
 If she presses yes then it will show a happy cat gif.
 
