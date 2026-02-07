@@ -3,7 +3,7 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
-import { Heart, ArrowRight } from "lucide-react";
+import { Heart } from "lucide-react";
 import { clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -11,12 +11,8 @@ function cn(...inputs: (string | undefined | null | false)[]) {
     return twMerge(clsx(inputs));
 }
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-type NoButtonStage = 1 | 2 | 3;
-
 // ─── Constants ──────────────────────────────────────────────────────────────
 const EVASION_RADIUS = 120;
-const EVASION_MOVES_TO_SWAP = 8;
 const BUTTON_WIDTH = 160;
 const BUTTON_HEIGHT = 56;
 const BUTTON_GAP = 24;
@@ -183,6 +179,7 @@ export default function ValentinePage() {
         x: number;
         y: number;
     } | null>(null);
+    const [evasionStarted, setEvasionStarted] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
 
     const noButtonRef = useRef<HTMLButtonElement>(null);
@@ -217,7 +214,7 @@ export default function ValentinePage() {
         return () => window.removeEventListener("resize", updatePositions);
     }, []);
 
-    // Track mouse position globally for Stage 1 evasion
+    // Track mouse position globally for evasion
     useEffect(() => {
         const handleMouseMove = (e: MouseEvent) => {
             mousePos.current = { x: e.clientX, y: e.clientY };
@@ -226,9 +223,11 @@ export default function ValentinePage() {
         return () => window.removeEventListener("mousemove", handleMouseMove);
     }, []);
 
-    // Stage 1: Evasion — button runs away from cursor
+    // Evasion — button runs away from cursor
     useEffect(() => {
         if (accepted || isMobile || !noPosition) return;
+
+        let evasionJustStarted = false;
 
         const evade = () => {
             const btn = noButtonRef.current;
@@ -246,6 +245,26 @@ export default function ValentinePage() {
             const distance = Math.sqrt(dx * dx + dy * dy);
 
             if (distance < EVASION_RADIUS) {
+                if (!evasionStarted) {
+                    // Set evasion started and initialize floating position to static No button's position
+                    setEvasionStarted(true);
+                    // Set floating button position to current static No button position
+                    setTimeout(() => {
+                        const staticBtn = noButtonRef.current;
+                        if (staticBtn) {
+                            const staticRect =
+                                staticBtn.getBoundingClientRect();
+                            setNoPosition(
+                                clampPosition(staticRect.left, staticRect.top),
+                            );
+                        }
+                    }, 0);
+                    evasionJustStarted = true;
+                }
+                if (evasionJustStarted) {
+                    animFrameRef.current = requestAnimationFrame(evade);
+                    return;
+                }
                 const angle = Math.atan2(dy, dx);
                 const pushDistance = EVASION_RADIUS - distance + 60;
                 const newX = rect.left + Math.cos(angle) * pushDistance;
@@ -283,7 +302,7 @@ export default function ValentinePage() {
             if (animFrameRef.current)
                 cancelAnimationFrame(animFrameRef.current);
         };
-    }, [accepted, noPosition, isMobile]);
+    }, [accepted, noPosition, isMobile, evasionStarted]);
 
     // Handle "No" button click → escalate stages
     const handleNoClick = useCallback(() => {
@@ -323,13 +342,12 @@ export default function ValentinePage() {
     );
 
     // ─── No Button ───────────────────────────────────────────────────────────
-    const NoButton = (
-        <motion.button
+    // Static No button (shown before evasion starts)
+    const NoButtonStatic = (
+        <button
             ref={noButtonRef}
             onClick={handleNoClick}
             onTouchStart={handleNoTouch}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
             className={cn(
                 "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
                 "bg-white text-pink-500 border-2 border-pink-300",
@@ -338,9 +356,10 @@ export default function ValentinePage() {
             )}
         >
             No
-        </motion.button>
+        </button>
     );
 
+    // Floating No button (shown after evasion starts)
     const NoButtonFloating = !!noPosition ? (
         <motion.button
             ref={noButtonRef}
@@ -351,6 +370,7 @@ export default function ValentinePage() {
             animate={{ x: noPosition?.x ?? 0, y: noPosition?.y ?? 0 }}
             transition={{ type: "spring", stiffness: 180, damping: 18 }}
             style={{ position: "fixed", left: 0, top: 0, zIndex: 50 }}
+            initial={{ x: noPosition?.x ?? 0, y: noPosition?.y ?? 0 }}
             className={cn(
                 "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
                 "bg-white text-pink-500 border-2 border-pink-300",
@@ -361,9 +381,6 @@ export default function ValentinePage() {
             No
         </motion.button>
     ) : null;
-
-    // ─── Stage 3 Arrow ───────────────────────────────────────────────────────
-    // ...existing code...
 
     // ─── Render ───────────────────────────────────────────────────────────────
     return (
@@ -414,14 +431,19 @@ export default function ValentinePage() {
                             style={{ width: BUTTON_WIDTH * 2 + BUTTON_GAP }}
                         >
                             {YesButton}
-                            <div className="w-40 h-14" />
+                            {/* Show static No button until evasion starts, then leave space for floating */}
+                            {!evasionStarted ? (
+                                NoButtonStatic
+                            ) : (
+                                <div className="w-40 h-14" />
+                            )}
                         </div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Floating No button */}
-            {!accepted && NoButtonFloating}
+            {/* Floating No button (appears after evasion starts) */}
+            {!accepted && evasionStarted && NoButtonFloating}
         </div>
     );
 }
