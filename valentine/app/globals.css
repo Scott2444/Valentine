@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+    --color-pink-50: #fdf2f8;
+    --color-pink-100: #fce7f3;
+    --color-pink-200: #fbcfe8;
+    --color-pink-300: #f9a8d4;
+    --color-pink-400: #f472b6;
+    --color-pink-500: #ec4899;
+    --color-pink-600: #db2777;
+    --color-red-400: #f87171;
+    --color-red-500: #ef4444;
+    --color-red-600: #dc2626;
+    --color-rose-500: #f43f5e;
+    --color-white: #ffffff;
+    --font-sans: "Nunito", "Segoe UI", system-ui, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html,
+body {
+    height: 100%;
+    overflow: hidden;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+    background: linear-gradient(
+        135deg,
+        #fdf2f8 0%,
+        #fce7f3 30%,
+        #fbcfe8 60%,
+        #fdf2f8 100%
+    );
+    color: #4a1942;
+    font-family: "Nunito", "Segoe UI", system-ui, sans-serif;
+}
+
+/* Floating hearts background animation */
+@keyframes floatUp {
+    0% {
+        transform: translateY(100vh) rotate(0deg) scale(0.5);
+        opacity: 0;
+    }
+    10% {
+        opacity: 0.6;
+    }
+    90% {
+        opacity: 0.4;
+    }
+    100% {
+        transform: translateY(-10vh) rotate(720deg) scale(1.2);
+        opacity: 0;
+    }
+}
+
+.floating-heart {
+    position: fixed;
+    color: #f9a8d4;
+    opacity: 0;
+    pointer-events: none;
+    animation: floatUp linear infinite;
+    z-index: 0;
+}
+
+/* Pulsing heart animation */
+@keyframes pulse-heart {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.15);
+    }
+}
+
+.animate-pulse-heart {
+    animation: pulse-heart 1.5s ease-in-out infinite;
+}
+
+/* Arrow bounce animation */
+@keyframes bounce-right {
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+    50% {
+        transform: translateX(16px);
+    }
+}
+
+.animate-bounce-right {
+    animation: bounce-right 0.6s ease-in-out infinite;
+}
+
+/* Jail bars pattern */
+.jail-bars {
+    position: absolute;
+    inset: -4px;
+    border-radius: 12px;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.jail-bars::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        90deg,
+        transparent 0px,
+        transparent 8px,
+        #6b7280 8px,
+        #6b7280 12px
+    );
+    opacity: 0.8;
+}
+
+.jail-bars::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 4px solid #6b7280;
+    border-radius: 12px;
 }
