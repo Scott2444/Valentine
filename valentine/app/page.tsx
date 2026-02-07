@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import confetti from "canvas-confetti";
 import { Heart, ArrowRight } from "lucide-react";
@@ -12,32 +12,43 @@ function cn(...inputs: (string | undefined | null | false)[]) {
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-type NoButtonStage = 1 | 2 | 3 | 4;
+type NoButtonStage = 1 | 2 | 3;
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const EVASION_RADIUS = 120;
+const EVASION_MOVES_TO_SWAP = 8;
 const BUTTON_WIDTH = 160;
 const BUTTON_HEIGHT = 56;
+const BUTTON_GAP = 24;
 const VIEWPORT_PADDING = 20;
 
 const HAPPY_CAT_GIF = "https://media.giphy.com/media/MDJ9IbxxvDUQM/giphy.gif";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-function getRandomPosition() {
-    const maxX = window.innerWidth - BUTTON_WIDTH - VIEWPORT_PADDING * 2;
-    const maxY = window.innerHeight - BUTTON_HEIGHT - VIEWPORT_PADDING * 2;
-    return {
-        x: VIEWPORT_PADDING + Math.random() * maxX,
-        y: VIEWPORT_PADDING + Math.random() * maxY,
-    };
-}
-
 function clampPosition(x: number, y: number) {
     const maxX = window.innerWidth - BUTTON_WIDTH - VIEWPORT_PADDING;
     const maxY = window.innerHeight - BUTTON_HEIGHT - VIEWPORT_PADDING;
     return {
         x: Math.max(VIEWPORT_PADDING, Math.min(x, maxX)),
         y: Math.max(VIEWPORT_PADDING, Math.min(y, maxY)),
+    };
+}
+
+function clampToViewport(x: number, y: number, width: number, height: number) {
+    const maxX = window.innerWidth - width - VIEWPORT_PADDING;
+    const maxY = window.innerHeight - height - VIEWPORT_PADDING;
+    return {
+        x: Math.max(VIEWPORT_PADDING, Math.min(x, maxX)),
+        y: Math.max(VIEWPORT_PADDING, Math.min(y, maxY)),
+    };
+}
+
+function getRandomPosition() {
+    const maxX = window.innerWidth - BUTTON_WIDTH - VIEWPORT_PADDING * 2;
+    const maxY = window.innerHeight - BUTTON_HEIGHT - VIEWPORT_PADDING * 2;
+    return {
+        x: VIEWPORT_PADDING + Math.random() * maxX,
+        y: VIEWPORT_PADDING + Math.random() * maxY,
     };
 }
 
@@ -85,14 +96,18 @@ function fireConfetti() {
 
 // ─── Floating Hearts Background ─────────────────────────────────────────────
 function FloatingHearts() {
-    const hearts = Array.from({ length: 15 }, (_, i) => ({
-        id: i,
-        left: `${Math.random() * 100}%`,
-        size: 14 + Math.random() * 22,
-        delay: Math.random() * 12,
-        duration: 8 + Math.random() * 10,
-        opacity: 0.15 + Math.random() * 0.25,
-    }));
+    const hearts = useMemo(
+        () =>
+            Array.from({ length: 15 }, (_, i) => ({
+                id: i,
+                left: `${Math.random() * 100}%`,
+                size: 14 + Math.random() * 22,
+                delay: Math.random() * 12,
+                duration: 8 + Math.random() * 10,
+                opacity: 0.15 + Math.random() * 0.25,
+            })),
+        [],
+    );
 
     return (
         <div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
@@ -178,6 +193,13 @@ export default function ValentinePage() {
         x: number;
         y: number;
     } | null>(null);
+    const [yesPosition, setYesPosition] = useState<{
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+    } | null>(null);
+    const [evasionCount, setEvasionCount] = useState(0);
     const [swapped, setSwapped] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
 
@@ -186,6 +208,7 @@ export default function ValentinePage() {
     const containerRef = useRef<HTMLDivElement>(null);
     const mousePos = useRef({ x: 0, y: 0 });
     const animFrameRef = useRef<number | null>(null);
+    const lastEvasionAt = useRef(0);
 
     // Detect mobile
     useEffect(() => {
@@ -196,6 +219,31 @@ export default function ValentinePage() {
         window.addEventListener("resize", checkMobile);
         return () => window.removeEventListener("resize", checkMobile);
     }, []);
+
+    useEffect(() => {
+        const updatePositions = () => {
+            if (!yesButtonRef.current) return;
+            const rect = yesButtonRef.current.getBoundingClientRect();
+            setYesPosition({
+                x: rect.left,
+                y: rect.top,
+                width: rect.width,
+                height: rect.height,
+            });
+
+            setNoPosition((prev) => {
+                if (stage !== 1 || swapped) return prev;
+                if (!prev) {
+                    return clampPosition(rect.right + BUTTON_GAP, rect.top);
+                }
+                return clampPosition(prev.x, prev.y);
+            });
+        };
+
+        updatePositions();
+        window.addEventListener("resize", updatePositions);
+        return () => window.removeEventListener("resize", updatePositions);
+    }, [stage, swapped]);
 
     // Track mouse position globally for Stage 1 evasion
     useEffect(() => {
@@ -208,7 +256,7 @@ export default function ValentinePage() {
 
     // Stage 1: Evasion — button runs away from cursor
     useEffect(() => {
-        if (stage !== 1 || accepted || noPosition !== null || isMobile) return;
+        if (stage !== 1 || accepted || isMobile || !noPosition) return;
 
         const evade = () => {
             const btn = noButtonRef.current;
@@ -250,9 +298,22 @@ export default function ValentinePage() {
                 ) {
                     const escape = getRandomPosition();
                     setNoPosition(escape);
-                    setStage(2);
                 } else {
                     setNoPosition(clamped);
+                }
+
+                const now = performance.now();
+                if (now - lastEvasionAt.current > 200) {
+                    lastEvasionAt.current = now;
+                    setEvasionCount((count) => {
+                        const next = count + 1;
+                        if (next >= EVASION_MOVES_TO_SWAP) {
+                            setStage(2);
+                            setSwapped(true);
+                            setNoPosition(null);
+                        }
+                        return next;
+                    });
                 }
             }
 
@@ -266,48 +327,38 @@ export default function ValentinePage() {
         };
     }, [stage, accepted, noPosition, isMobile]);
 
-    // Handle "No" button hover → Stage 2 teleport
-    const handleNoHover = useCallback(() => {
-        if (stage === 1) {
-            setStage(2);
-            setNoPosition(getRandomPosition());
-        } else if (stage === 2) {
-            setNoPosition(getRandomPosition());
-        }
-    }, [stage]);
-
     // Handle "No" button click → escalate stages
     const handleNoClick = useCallback(() => {
         if (stage === 1) {
-            // Shouldn't normally reach here, but handle it
-            setStage(2);
-            setNoPosition(getRandomPosition());
+            if (evasionCount >= EVASION_MOVES_TO_SWAP) {
+                setStage(2);
+                setSwapped(true);
+                setNoPosition(null);
+            }
         } else if (stage === 2) {
-            // Stage 3: Swap
-            setStage(3);
-            setSwapped(true);
-            setNoPosition(null);
-        } else if (stage === 3) {
             // Stage 4: Jail
-            setStage(4);
+            setStage(3);
             setSwapped(false);
             setNoPosition(null);
         }
-    }, [stage]);
+    }, [stage, evasionCount]);
 
     // Mobile: tap on No escalates stages directly
     const handleNoTouch = useCallback(
         (e: React.TouchEvent) => {
             e.preventDefault();
             if (stage === 1) {
-                setStage(2);
-                setNoPosition(getRandomPosition());
+                setEvasionCount((count) => {
+                    const next = count + 1;
+                    if (next >= EVASION_MOVES_TO_SWAP) {
+                        setStage(2);
+                        setSwapped(true);
+                        setNoPosition(null);
+                    }
+                    return next;
+                });
             } else if (stage === 2) {
                 setStage(3);
-                setSwapped(true);
-                setNoPosition(null);
-            } else if (stage === 3) {
-                setStage(4);
                 setSwapped(false);
                 setNoPosition(null);
             }
@@ -343,56 +394,83 @@ export default function ValentinePage() {
     );
 
     // ─── No Button ───────────────────────────────────────────────────────────
-    const noButtonStyle: React.CSSProperties =
-        noPosition && !swapped
-            ? {
-                  position: "fixed",
-                  left: noPosition.x,
-                  top: noPosition.y,
-                  zIndex: 50,
-                  transition:
-                      stage === 1
-                          ? "left 0.15s ease-out, top 0.15s ease-out"
-                          : "none",
-              }
-            : {};
-
     const NoButton = (
         <motion.button
             ref={noButtonRef}
-            onMouseEnter={handleNoHover}
             onClick={handleNoClick}
             onTouchStart={handleNoTouch}
-            whileHover={stage < 4 ? { scale: 1.05 } : undefined}
-            whileTap={stage < 4 ? { scale: 0.95 } : undefined}
-            style={noButtonStyle}
+            whileHover={stage < 3 ? { scale: 1.05 } : undefined}
+            whileTap={stage < 3 ? { scale: 0.95 } : undefined}
             className={cn(
                 "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
                 "bg-white text-pink-500 border-2 border-pink-300",
                 "shadow-md hover:shadow-lg transition-shadow duration-300",
                 "min-w-[160px]",
-                stage === 4
+                stage === 3
                     ? "cursor-not-allowed opacity-60"
                     : "cursor-pointer",
             )}
-            disabled={stage === 4}
+            disabled={stage === 3}
         >
             No
-            {stage === 4 && <div className="jail-bars" />}
+            {stage === 3 && <div className="jail-bars" />}
         </motion.button>
     );
 
-    // ─── Stage 4 Arrow ───────────────────────────────────────────────────────
-    const Stage4Arrow = stage === 4 && (
-        <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex items-center gap-2 text-pink-600 font-extrabold text-lg md:text-2xl mt-4"
+    const shouldFloatNo = stage === 1 && !!noPosition && !swapped;
+    const NoButtonFloating = shouldFloatNo ? (
+        <motion.button
+            ref={noButtonRef}
+            onClick={handleNoClick}
+            onTouchStart={handleNoTouch}
+            whileHover={stage < 3 ? { scale: 1.05 } : undefined}
+            whileTap={stage < 3 ? { scale: 0.95 } : undefined}
+            animate={{ x: noPosition?.x ?? 0, y: noPosition?.y ?? 0 }}
+            transition={{ type: "spring", stiffness: 180, damping: 18 }}
+            style={{ position: "fixed", left: 0, top: 0, zIndex: 50 }}
+            className={cn(
+                "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
+                "bg-white text-pink-500 border-2 border-pink-300",
+                "shadow-md hover:shadow-lg transition-shadow duration-300",
+                "min-w-[160px]",
+                stage === 3
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer",
+            )}
+            disabled={stage === 3}
         >
-            <span>Click here instead!</span>
-            <ArrowRight className="w-8 h-8 animate-bounce-right" />
-        </motion.div>
-    );
+            No
+            {stage === 3 && <div className="jail-bars" />}
+        </motion.button>
+    ) : null;
+
+    // ─── Stage 3 Arrow ───────────────────────────────────────────────────────
+    const arrowPosition = useMemo(() => {
+        if (!yesPosition) return null;
+        const width = 220;
+        const height = 40;
+        const targetX = yesPosition.x - width - 12;
+        const targetY = yesPosition.y + yesPosition.height / 2 - height / 2;
+        return clampToViewport(targetX, targetY, width, height);
+    }, [yesPosition]);
+
+    const Stage3Arrow =
+        stage === 3 && arrowPosition ? (
+            <motion.div
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                style={{
+                    position: "fixed",
+                    left: arrowPosition.x,
+                    top: arrowPosition.y,
+                    zIndex: 40,
+                }}
+                className="flex items-center gap-2 text-pink-600 font-extrabold text-lg md:text-2xl"
+            >
+                <span>Click here instead!</span>
+                <ArrowRight className="w-8 h-8 animate-bounce-right" />
+            </motion.div>
+        ) : null;
 
     // ─── Render ───────────────────────────────────────────────────────────────
     return (
@@ -439,23 +517,30 @@ export default function ValentinePage() {
 
                         {/* Buttons container */}
                         <div className="flex flex-col items-center gap-6">
-                            <div className="flex items-center gap-6">
+                            <div
+                                className="flex items-center justify-start gap-6"
+                                style={{ width: BUTTON_WIDTH * 2 + BUTTON_GAP }}
+                            >
                                 {swapped ? (
                                     <>
                                         {NoButton}
                                         {YesButton}
                                     </>
+                                ) : stage === 1 ? (
+                                    <>
+                                        {YesButton}
+                                        <div className="w-40 h-14" />
+                                    </>
                                 ) : (
                                     <>
                                         {YesButton}
-                                        {/* Only render NoButton in-flow if not in teleport/evasion position mode */}
-                                        {!noPosition && NoButton}
+                                        {NoButton}
                                     </>
                                 )}
                             </div>
 
-                            {/* Arrow for stage 4 */}
-                            {Stage4Arrow}
+                            {/* Arrow for stage 3 */}
+                            {Stage3Arrow}
                         </div>
 
                         {/* Stage indicator (subtle) */}
@@ -465,10 +550,8 @@ export default function ValentinePage() {
                                 animate={{ opacity: 1 }}
                                 className="mt-8 text-sm text-pink-400/60 italic"
                             >
-                                {stage === 2 &&
-                                    "Hmm, that button seems to have a mind of its own..."}
-                                {stage === 3 && "Wait, did they just swap? 🤔"}
-                                {stage === 4 &&
+                                {stage === 2 && "Wait, did they just swap? 🤔"}
+                                {stage === 3 &&
                                     "Okay fine, the No button is in jail now. 🔒"}
                             </motion.p>
                         )}
@@ -476,8 +559,8 @@ export default function ValentinePage() {
                 )}
             </AnimatePresence>
 
-            {/* Teleported No button (rendered outside flow when it has a fixed position) */}
-            {!accepted && noPosition && !swapped && NoButton}
+            {/* Floating No button (Stage 1 only) */}
+            {!accepted && NoButtonFloating}
         </div>
     );
 }
