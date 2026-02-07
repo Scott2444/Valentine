@@ -17,8 +17,31 @@ const BUTTON_WIDTH = 160;
 const BUTTON_HEIGHT = 56;
 const BUTTON_GAP = 24;
 const VIEWPORT_PADDING = 20;
+const MAX_EVASIONS = 200;
 
 const HAPPY_CAT_GIF = "https://media.giphy.com/media/MDJ9IbxxvDUQM/giphy.gif";
+
+const noButton = cn(
+    "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
+    "bg-white text-pink-500 border-2 border-pink-300",
+    "shadow-md hover:shadow-lg transition-shadow duration-300",
+    "min-w-40 cursor-pointer",
+);
+const yesButton = cn(
+    "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
+    "bg-linear-to-r from-pink-500 to-rose-500 text-white",
+    "shadow-lg shadow-pink-300/50 hover:shadow-xl hover:shadow-pink-400/60",
+    "transition-shadow duration-300",
+    "min-w-40 cursor-pointer",
+);
+const noText = "No";
+const yesText = (
+    <span className="flex items-center justify-center gap-2">
+        <Heart className="w-5 h-5 fill-white" />
+        Yes!
+        <Heart className="w-5 h-5 fill-white" />
+    </span>
+);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 function clampPosition(x: number, y: number) {
@@ -180,26 +203,19 @@ export default function ValentinePage() {
         y: number;
     } | null>(null);
     const [evasionStarted, setEvasionStarted] = useState(false);
-    const [isMobile, setIsMobile] = useState(false);
+    const [evasionDisabled, setEvasionDisabled] = useState(false);
+    const [swapButtons, setSwapButtons] = useState(false);
 
     const noButtonRef = useRef<HTMLButtonElement>(null);
     const yesButtonRef = useRef<HTMLButtonElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const mousePos = useRef({ x: 0, y: 0 });
     const animFrameRef = useRef<number | null>(null);
-
-    // Detect mobile
-    useEffect(() => {
-        const checkMobile = () => {
-            setIsMobile(window.innerWidth < 768 || "ontouchstart" in window);
-        };
-        checkMobile();
-        window.addEventListener("resize", checkMobile);
-        return () => window.removeEventListener("resize", checkMobile);
-    }, []);
+    const evasionCountRef = useRef(0);
 
     useEffect(() => {
         const updatePositions = () => {
+            if (evasionDisabled) return;
             if (!yesButtonRef.current) return;
             const rect = yesButtonRef.current.getBoundingClientRect();
             setNoPosition((prev) => {
@@ -212,7 +228,7 @@ export default function ValentinePage() {
         updatePositions();
         window.addEventListener("resize", updatePositions);
         return () => window.removeEventListener("resize", updatePositions);
-    }, []);
+    }, [evasionDisabled]);
 
     // Track mouse position globally for evasion
     useEffect(() => {
@@ -225,7 +241,7 @@ export default function ValentinePage() {
 
     // Evasion — button runs away from cursor
     useEffect(() => {
-        if (accepted || isMobile || !noPosition) return;
+        if (accepted || !noPosition || evasionDisabled) return;
 
         let evasionJustStarted = false;
 
@@ -246,9 +262,7 @@ export default function ValentinePage() {
 
             if (distance < EVASION_RADIUS) {
                 if (!evasionStarted) {
-                    // Set evasion started and initialize floating position to static No button's position
                     setEvasionStarted(true);
-                    // Set floating button position to current static No button position
                     setTimeout(() => {
                         const staticBtn = noButtonRef.current;
                         if (staticBtn) {
@@ -272,7 +286,6 @@ export default function ValentinePage() {
 
                 const clamped = clampPosition(newX, newY);
 
-                // If clamped to a corner, add random offset to escape
                 if (
                     (clamped.x <= VIEWPORT_PADDING + 5 ||
                         clamped.x >=
@@ -292,6 +305,12 @@ export default function ValentinePage() {
                 } else {
                     setNoPosition(clamped);
                 }
+
+                evasionCountRef.current += 1;
+                if (evasionCountRef.current > MAX_EVASIONS) {
+                    setEvasionDisabled(true);
+                    return;
+                }
             }
 
             animFrameRef.current = requestAnimationFrame(evade);
@@ -302,17 +321,13 @@ export default function ValentinePage() {
             if (animFrameRef.current)
                 cancelAnimationFrame(animFrameRef.current);
         };
-    }, [accepted, noPosition, isMobile, evasionStarted]);
+    }, [accepted, noPosition, evasionStarted, evasionDisabled]);
 
     // Handle "No" button click → escalate stages
     const handleNoClick = useCallback(() => {
-        // No action for No button except evasion
-    }, []);
-
-    const handleNoTouch = useCallback((e: React.TouchEvent) => {
-        e.preventDefault();
-        // No action for No button except evasion
-    }, []);
+        if (!evasionDisabled) return;
+        setSwapButtons((prev) => !prev);
+    }, [evasionDisabled]);
 
     const handleYesClick = () => {
         setAccepted(true);
@@ -322,22 +337,12 @@ export default function ValentinePage() {
     const YesButton = (
         <motion.button
             ref={yesButtonRef}
-            onClick={handleYesClick}
+            onClick={swapButtons ? handleNoClick : handleYesClick}
             whileHover={{ scale: 1.08 }}
             whileTap={{ scale: 0.95 }}
-            className={cn(
-                "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
-                "bg-linear-to-r from-pink-500 to-rose-500 text-white",
-                "shadow-lg shadow-pink-300/50 hover:shadow-xl hover:shadow-pink-400/60",
-                "transition-shadow duration-300",
-                "min-w-40 cursor-pointer",
-            )}
+            className={swapButtons ? noButton : yesButton}
         >
-            <span className="flex items-center justify-center gap-2">
-                <Heart className="w-5 h-5 fill-white" />
-                Yes!
-                <Heart className="w-5 h-5 fill-white" />
-            </span>
+            {swapButtons ? noText : yesText}
         </motion.button>
     );
 
@@ -346,43 +351,33 @@ export default function ValentinePage() {
     const NoButtonStatic = (
         <button
             ref={noButtonRef}
-            onClick={handleNoClick}
-            onTouchStart={handleNoTouch}
-            className={cn(
-                "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
-                "bg-white text-pink-500 border-2 border-pink-300",
-                "shadow-md hover:shadow-lg transition-shadow duration-300",
-                "min-w-40 cursor-pointer",
-            )}
+            onClick={swapButtons ? handleYesClick : handleNoClick}
+            className={swapButtons ? yesButton : noButton}
         >
-            No
+            {swapButtons ? yesText : noText}
         </button>
     );
 
-    // Floating No button (shown after evasion starts)
+    // Floating button (shown after evasion starts, no by default)
     const NoButtonFloating = !!noPosition ? (
         <motion.button
             ref={noButtonRef}
-            onClick={handleNoClick}
-            onTouchStart={handleNoTouch}
+            onClick={swapButtons ? handleYesClick : handleNoClick}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
             animate={{ x: noPosition?.x ?? 0, y: noPosition?.y ?? 0 }}
             transition={{ type: "spring", stiffness: 180, damping: 18 }}
             style={{ position: "fixed", left: 0, top: 0, zIndex: 50 }}
             initial={{ x: noPosition?.x ?? 0, y: noPosition?.y ?? 0 }}
-            className={cn(
-                "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
-                "bg-white text-pink-500 border-2 border-pink-300",
-                "shadow-md hover:shadow-lg transition-shadow duration-300",
-                "min-w-40 cursor-pointer",
-            )}
+            className={swapButtons ? yesButton : noButton}
         >
-            No
+            {swapButtons ? yesText : noText}
         </motion.button>
     ) : null;
 
     // ─── Render ───────────────────────────────────────────────────────────────
+    const showFloatingNo = !accepted && evasionStarted;
+
     return (
         <div
             ref={containerRef}
@@ -443,7 +438,7 @@ export default function ValentinePage() {
             </AnimatePresence>
 
             {/* Floating No button (appears after evasion starts) */}
-            {!accepted && evasionStarted && NoButtonFloating}
+            {showFloatingNo && NoButtonFloating}
         </div>
     );
 }
