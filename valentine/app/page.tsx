@@ -34,15 +34,6 @@ function clampPosition(x: number, y: number) {
     };
 }
 
-function clampToViewport(x: number, y: number, width: number, height: number) {
-    const maxX = window.innerWidth - width - VIEWPORT_PADDING;
-    const maxY = window.innerHeight - height - VIEWPORT_PADDING;
-    return {
-        x: Math.max(VIEWPORT_PADDING, Math.min(x, maxX)),
-        y: Math.max(VIEWPORT_PADDING, Math.min(y, maxY)),
-    };
-}
-
 function getRandomPosition() {
     const maxX = window.innerWidth - BUTTON_WIDTH - VIEWPORT_PADDING * 2;
     const maxY = window.innerHeight - BUTTON_HEIGHT - VIEWPORT_PADDING * 2;
@@ -188,19 +179,10 @@ function SuccessView() {
 // ─── Main Component ─────────────────────────────────────────────────────────
 export default function ValentinePage() {
     const [accepted, setAccepted] = useState(false);
-    const [stage, setStage] = useState<NoButtonStage>(1);
     const [noPosition, setNoPosition] = useState<{
         x: number;
         y: number;
     } | null>(null);
-    const [yesPosition, setYesPosition] = useState<{
-        x: number;
-        y: number;
-        width: number;
-        height: number;
-    } | null>(null);
-    const [evasionCount, setEvasionCount] = useState(0);
-    const [swapped, setSwapped] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
 
     const noButtonRef = useRef<HTMLButtonElement>(null);
@@ -208,7 +190,6 @@ export default function ValentinePage() {
     const containerRef = useRef<HTMLDivElement>(null);
     const mousePos = useRef({ x: 0, y: 0 });
     const animFrameRef = useRef<number | null>(null);
-    const lastEvasionAt = useRef(0);
 
     // Detect mobile
     useEffect(() => {
@@ -224,26 +205,17 @@ export default function ValentinePage() {
         const updatePositions = () => {
             if (!yesButtonRef.current) return;
             const rect = yesButtonRef.current.getBoundingClientRect();
-            setYesPosition({
-                x: rect.left,
-                y: rect.top,
-                width: rect.width,
-                height: rect.height,
-            });
-
             setNoPosition((prev) => {
-                if (stage !== 1 || swapped) return prev;
                 if (!prev) {
                     return clampPosition(rect.right + BUTTON_GAP, rect.top);
                 }
                 return clampPosition(prev.x, prev.y);
             });
         };
-
         updatePositions();
         window.addEventListener("resize", updatePositions);
         return () => window.removeEventListener("resize", updatePositions);
-    }, [stage, swapped]);
+    }, []);
 
     // Track mouse position globally for Stage 1 evasion
     useEffect(() => {
@@ -256,7 +228,7 @@ export default function ValentinePage() {
 
     // Stage 1: Evasion — button runs away from cursor
     useEffect(() => {
-        if (stage !== 1 || accepted || isMobile || !noPosition) return;
+        if (accepted || isMobile || !noPosition) return;
 
         const evade = () => {
             const btn = noButtonRef.current;
@@ -301,20 +273,6 @@ export default function ValentinePage() {
                 } else {
                     setNoPosition(clamped);
                 }
-
-                const now = performance.now();
-                if (now - lastEvasionAt.current > 200) {
-                    lastEvasionAt.current = now;
-                    setEvasionCount((count) => {
-                        const next = count + 1;
-                        if (next >= EVASION_MOVES_TO_SWAP) {
-                            setStage(2);
-                            setSwapped(true);
-                            setNoPosition(null);
-                        }
-                        return next;
-                    });
-                }
             }
 
             animFrameRef.current = requestAnimationFrame(evade);
@@ -325,46 +283,17 @@ export default function ValentinePage() {
             if (animFrameRef.current)
                 cancelAnimationFrame(animFrameRef.current);
         };
-    }, [stage, accepted, noPosition, isMobile]);
+    }, [accepted, noPosition, isMobile]);
 
     // Handle "No" button click → escalate stages
     const handleNoClick = useCallback(() => {
-        if (stage === 1) {
-            if (evasionCount >= EVASION_MOVES_TO_SWAP) {
-                setStage(2);
-                setSwapped(true);
-                setNoPosition(null);
-            }
-        } else if (stage === 2) {
-            // Stage 4: Jail
-            setStage(3);
-            setSwapped(false);
-            setNoPosition(null);
-        }
-    }, [stage, evasionCount]);
+        // No action for No button except evasion
+    }, []);
 
-    // Mobile: tap on No escalates stages directly
-    const handleNoTouch = useCallback(
-        (e: React.TouchEvent) => {
-            e.preventDefault();
-            if (stage === 1) {
-                setEvasionCount((count) => {
-                    const next = count + 1;
-                    if (next >= EVASION_MOVES_TO_SWAP) {
-                        setStage(2);
-                        setSwapped(true);
-                        setNoPosition(null);
-                    }
-                    return next;
-                });
-            } else if (stage === 2) {
-                setStage(3);
-                setSwapped(false);
-                setNoPosition(null);
-            }
-        },
-        [stage],
-    );
+    const handleNoTouch = useCallback((e: React.TouchEvent) => {
+        e.preventDefault();
+        // No action for No button except evasion
+    }, []);
 
     const handleYesClick = () => {
         setAccepted(true);
@@ -379,10 +308,10 @@ export default function ValentinePage() {
             whileTap={{ scale: 0.95 }}
             className={cn(
                 "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
-                "bg-gradient-to-r from-pink-500 to-rose-500 text-white",
+                "bg-linear-to-r from-pink-500 to-rose-500 text-white",
                 "shadow-lg shadow-pink-300/50 hover:shadow-xl hover:shadow-pink-400/60",
                 "transition-shadow duration-300",
-                "min-w-[160px] cursor-pointer",
+                "min-w-40 cursor-pointer",
             )}
         >
             <span className="flex items-center justify-center gap-2">
@@ -399,32 +328,26 @@ export default function ValentinePage() {
             ref={noButtonRef}
             onClick={handleNoClick}
             onTouchStart={handleNoTouch}
-            whileHover={stage < 3 ? { scale: 1.05 } : undefined}
-            whileTap={stage < 3 ? { scale: 0.95 } : undefined}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             className={cn(
                 "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
                 "bg-white text-pink-500 border-2 border-pink-300",
                 "shadow-md hover:shadow-lg transition-shadow duration-300",
-                "min-w-[160px]",
-                stage === 3
-                    ? "cursor-not-allowed opacity-60"
-                    : "cursor-pointer",
+                "min-w-40 cursor-pointer",
             )}
-            disabled={stage === 3}
         >
             No
-            {stage === 3 && <div className="jail-bars" />}
         </motion.button>
     );
 
-    const shouldFloatNo = stage === 1 && !!noPosition && !swapped;
-    const NoButtonFloating = shouldFloatNo ? (
+    const NoButtonFloating = !!noPosition ? (
         <motion.button
             ref={noButtonRef}
             onClick={handleNoClick}
             onTouchStart={handleNoTouch}
-            whileHover={stage < 3 ? { scale: 1.05 } : undefined}
-            whileTap={stage < 3 ? { scale: 0.95 } : undefined}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
             animate={{ x: noPosition?.x ?? 0, y: noPosition?.y ?? 0 }}
             transition={{ type: "spring", stiffness: 180, damping: 18 }}
             style={{ position: "fixed", left: 0, top: 0, zIndex: 50 }}
@@ -432,45 +355,15 @@ export default function ValentinePage() {
                 "relative px-10 py-4 rounded-2xl font-bold text-lg md:text-xl",
                 "bg-white text-pink-500 border-2 border-pink-300",
                 "shadow-md hover:shadow-lg transition-shadow duration-300",
-                "min-w-[160px]",
-                stage === 3
-                    ? "cursor-not-allowed opacity-60"
-                    : "cursor-pointer",
+                "min-w-40 cursor-pointer",
             )}
-            disabled={stage === 3}
         >
             No
-            {stage === 3 && <div className="jail-bars" />}
         </motion.button>
     ) : null;
 
     // ─── Stage 3 Arrow ───────────────────────────────────────────────────────
-    const arrowPosition = useMemo(() => {
-        if (!yesPosition) return null;
-        const width = 220;
-        const height = 40;
-        const targetX = yesPosition.x - width - 12;
-        const targetY = yesPosition.y + yesPosition.height / 2 - height / 2;
-        return clampToViewport(targetX, targetY, width, height);
-    }, [yesPosition]);
-
-    const Stage3Arrow =
-        stage === 3 && arrowPosition ? (
-            <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                style={{
-                    position: "fixed",
-                    left: arrowPosition.x,
-                    top: arrowPosition.y,
-                    zIndex: 40,
-                }}
-                className="flex items-center gap-2 text-pink-600 font-extrabold text-lg md:text-2xl"
-            >
-                <span>Click here instead!</span>
-                <ArrowRight className="w-8 h-8 animate-bounce-right" />
-            </motion.div>
-        ) : null;
+    // ...existing code...
 
     // ─── Render ───────────────────────────────────────────────────────────────
     return (
@@ -516,50 +409,18 @@ export default function ValentinePage() {
                         </p>
 
                         {/* Buttons container */}
-                        <div className="flex flex-col items-center gap-6">
-                            <div
-                                className="flex items-center justify-start gap-6"
-                                style={{ width: BUTTON_WIDTH * 2 + BUTTON_GAP }}
-                            >
-                                {swapped ? (
-                                    <>
-                                        {NoButton}
-                                        {YesButton}
-                                    </>
-                                ) : stage === 1 ? (
-                                    <>
-                                        {YesButton}
-                                        <div className="w-40 h-14" />
-                                    </>
-                                ) : (
-                                    <>
-                                        {YesButton}
-                                        {NoButton}
-                                    </>
-                                )}
-                            </div>
-
-                            {/* Arrow for stage 3 */}
-                            {Stage3Arrow}
+                        <div
+                            className="flex items-center justify-start gap-6"
+                            style={{ width: BUTTON_WIDTH * 2 + BUTTON_GAP }}
+                        >
+                            {YesButton}
+                            <div className="w-40 h-14" />
                         </div>
-
-                        {/* Stage indicator (subtle) */}
-                        {stage > 1 && (
-                            <motion.p
-                                initial={{ opacity: 0 }}
-                                animate={{ opacity: 1 }}
-                                className="mt-8 text-sm text-pink-400/60 italic"
-                            >
-                                {stage === 2 && "Wait, did they just swap? 🤔"}
-                                {stage === 3 &&
-                                    "Okay fine, the No button is in jail now. 🔒"}
-                            </motion.p>
-                        )}
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Floating No button (Stage 1 only) */}
+            {/* Floating No button */}
             {!accepted && NoButtonFloating}
         </div>
     );
